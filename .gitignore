@@ -1,0 +1,13 @@
+# Python
+__pycache__/
+*.py[cod]
+
+# 打包产物（可随时按 README「打包发布」重新生成）
+build/
+dist/
+installer/
+*.spec
+
+# 本地临时文件
+*.log
+_tmp/
