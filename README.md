@@ -4,6 +4,12 @@
 
 需求来源见 [需求文档.md](需求文档.md)。当前为 MVP（需求 P0 范围）。
 
+## 截图
+
+| 主窗口（代码伪装皮肤） | 贴条模式 | 目录面板 |
+|---|---|---|
+| ![主窗口](docs/screenshot-main.png) | ![贴条模式](docs/screenshot-strip.png) | ![目录面板](docs/screenshot-toc.png) |
+
 ## 运行
 
 ```bash

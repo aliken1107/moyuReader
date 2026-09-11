@@ -1,0 +1,50 @@
+name: Build Windows
+
+on:
+  push:
+    tags: ["v*"]        # 推送 v 开头的标签时自动构建并发布 Release
+  workflow_dispatch:     # 也允许在 Actions 页面手动触发
+
+permissions:
+  contents: write        # 发布 Release 需要
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.14"
+
+      - name: 安装依赖
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt pyinstaller
+
+      - name: 打包单文件 exe
+        run: python -m PyInstaller --noconfirm --clean --noconsole --onefile --name MoyuReader --icon icon.ico --add-data "icon.png;." main.py
+
+      - name: 安装 Inno Setup
+        run: choco install innosetup -y --no-progress
+
+      - name: 编译安装包
+        shell: pwsh
+        run: '& "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" MoyuReader.iss'
+
+      - name: 上传构建产物
+        uses: actions/upload-artifact@v4
+        with:
+          name: MoyuReader-windows
+          path: |
+            dist/MoyuReader.exe
+            installer/MoyuReader-Setup-*.exe
+
+      - name: 发布 Release（仅 tag 推送时）
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist/MoyuReader.exe
+            installer/MoyuReader-Setup-*.exe
