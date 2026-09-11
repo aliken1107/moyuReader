@@ -17,6 +17,7 @@ QToolButton {
 QToolButton:hover { background: #2b2f34; color: #e6e9ed; }
 QToolButton:pressed { background: #363b41; }
 QToolButton[danger="true"]:hover { background: #d93025; color: #ffffff; }
+QToolButton::menu-indicator { image: none; width: 0px; }
 
 QMenu { background-color: #202327; border: 1px solid #33373d; border-radius: 8px; padding: 4px; }
 QMenu::item { padding: 5px 24px 5px 12px; border-radius: 5px; }
@@ -45,12 +46,36 @@ QComboBox::drop-down { border: none; width: 20px; }
 QComboBox QAbstractItemView {
     background: #202327; border: 1px solid #33373d; selection-background-color: #2f6feb;
 }
-QSpinBox::up-button, QDoubleSpinBox::up-button,
+QSpinBox::up-button, QDoubleSpinBox::up-button {
+    background: #262a30; border: none; width: 16px;
+    subcontrol-origin: border; subcontrol-position: top right;
+    border-radius: 0 6px 0 0;
+}
 QSpinBox::down-button, QDoubleSpinBox::down-button {
     background: #262a30; border: none; width: 16px;
+    subcontrol-origin: border; subcontrol-position: bottom right;
+    border-radius: 0 0 6px 0;
 }
 QSpinBox::up-button:hover, QDoubleSpinBox::up-button:hover,
 QSpinBox::down-button:hover, QDoubleSpinBox::down-button:hover { background: #2f6feb; }
+QSpinBox::up-arrow, QDoubleSpinBox::up-arrow {
+    width: 0; height: 0;
+    border-left: 4px solid transparent; border-right: 4px solid transparent;
+    border-bottom: 5px solid #a9b0b8;
+}
+QSpinBox::up-arrow:hover, QDoubleSpinBox::up-arrow:hover,
+QSpinBox::up-arrow:pressed, QDoubleSpinBox::up-arrow:pressed {
+    border-bottom: 5px solid #ffffff;
+}
+QSpinBox::down-arrow, QDoubleSpinBox::down-arrow {
+    width: 0; height: 0;
+    border-left: 4px solid transparent; border-right: 4px solid transparent;
+    border-top: 5px solid #a9b0b8;
+}
+QSpinBox::down-arrow:hover, QDoubleSpinBox::down-arrow:hover,
+QSpinBox::down-arrow:pressed, QDoubleSpinBox::down-arrow:pressed {
+    border-top: 5px solid #ffffff;
+}
 
 QSlider::groove:horizontal { height: 4px; background: #33373d; border-radius: 2px; }
 QSlider::handle:horizontal { width: 14px; height: 14px; margin: -5px 0; border-radius: 7px; background: #2f6feb; }

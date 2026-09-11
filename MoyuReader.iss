@@ -3,12 +3,12 @@
 
 [Setup]
 AppName=MoyuReader
-AppVersion=0.2.0
+AppVersion=0.2.1
 AppPublisher=MoyuReader
 DefaultDirName={autopf}\MoyuReader
 DefaultGroupName=MoyuReader
 OutputDir=installer
-OutputBaseFilename=MoyuReader-Setup-0.2.0
+OutputBaseFilename=MoyuReader-Setup-0.2.1
 Compression=lzma2/max
 SolidCompression=yes
 ArchitecturesInstallIn64BitMode=x64compatible

@@ -29,6 +29,7 @@ DEFAULT_SETTINGS = {
     "auto_scroll_speed": 1,    # 自动滚动速度 0=关 1=慢 2=中 3=快
     "window_title": "MoyuReader",  # 窗口/托盘显示名称
     "geometry": None,          # 窗口位置与大小 [x, y, w, h]，关闭时保存
+    "preset_geometry": {},     # 各模式的记忆尺寸 {small/strip/normal: [x, y, w, h]}
     "hide_on_blur": False,     # 失焦自动隐藏（默认关，防止误藏）
     "hide_on_leave": False,    # 鼠标移出窗口自动隐藏（默认关）
 }

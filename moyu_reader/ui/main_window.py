@@ -18,7 +18,7 @@ from .settings_dialog import SettingsDialog
 from .toc_dialog import TocDialog
 
 MARGIN = 16  # 窗口内边距，用于投影阴影
-HIT = 8      # 边缘缩放命中宽度
+EDGE_BAND = MARGIN + 6  # 边缘缩放感应带：阴影区 + 可视边缘向内 6px
 MIN_W, MIN_H = 220, 90  # 最小尺寸：允许缩到贴条大小
 
 # 边缘标志位
@@ -89,11 +89,16 @@ class MainWindow(QMainWindow):
         self._invisible = False
         self._resize = None
         self._toc = None
-        self._click_through = False
         self._leave_timer = QTimer(self)
         self._leave_timer.setSingleShot(True)
         self._leave_timer.setInterval(400)
         self._leave_timer.timeout.connect(self._maybe_hide_on_leave)
+        # 失焦延迟确认：打开模态弹窗的瞬间会先出现"焦点为空"的过渡信号，
+        # 立即隐藏会连弹窗一起藏掉（设置页无法使用的 bug），故延迟后再判断
+        self._blur_timer = QTimer(self)
+        self._blur_timer.setSingleShot(True)
+        self._blur_timer.setInterval(150)
+        self._blur_timer.timeout.connect(self._maybe_hide_on_blur)
         self.setWindowTitle(ctx.settings["window_title"])
         self.setWindowIcon(make_icon())  # 任务栏图标
         self.setMinimumSize(MIN_W, MIN_H)
@@ -106,7 +111,7 @@ class MainWindow(QMainWindow):
         self.titlebar = TitleBar(ctx.settings["window_title"], icon_pm)
         self.titlebar.add_menu_button(self._build_header_menu(), "菜单")
         self.titlebar.add_button("⚙", self.show_settings, "设置 (Ctrl+,)")
-        self.titlebar.add_button("◐", self.toggle_invisible, "隐形模式 (F11)")
+        self.titlebar.add_button("👁", self.toggle_invisible, "隐形模式 (F11)")
         self.titlebar.add_button("—", self.boss_hide, "隐藏到托盘")
         self.titlebar.add_button("✕", self.close, "关闭", danger=True)
 
@@ -143,6 +148,15 @@ class MainWindow(QMainWindow):
         inner.addWidget(self.status)
         outer.addWidget(chrome)
         self.setCentralWidget(root)
+
+        # 边缘缩放：需要主窗口及标题栏/状态栏的悬停事件（用于光标反馈），
+        # 事件过滤器安装到应用级，保证按在阅读区/标题栏边缘也能进入缩放
+        self.setMouseTracking(True)
+        self.titlebar.setMouseTracking(True)
+        self.status.setMouseTracking(True)
+        root.setMouseTracking(True)
+        chrome.setMouseTracking(True)
+        QApplication.instance().installEventFilter(self)
 
         self._install_shortcuts()
 
@@ -220,25 +234,54 @@ class MainWindow(QMainWindow):
         self._reapply_window()
 
     # ---------- 尺寸预设 ----------
-    def apply_preset(self, kind):
-        """预设窗口尺寸：small=小窗 / strip=贴条（隐形）/ normal=恢复。"""
+    def _save_mode_geometry(self):
+        """把当前窗口位置与大小记进当前模式的档案（用户手动改过的尺寸会被记住）。"""
+        mode = getattr(self, "_current_mode", None)
+        if not mode:
+            return
+        g = self.geometry()
+        self.ctx.settings.setdefault("preset_geometry", {})[mode] = [g.x(), g.y(), g.width(), g.height()]
+        from .. import config
+        config.save_settings(self.ctx.settings)
+
+    def _restore_mode_geometry(self, kind, default_w, default_h, place=None):
+        """恢复某模式记忆的窗口几何；无记忆或不在屏幕内则用默认值。"""
+        pg = self.ctx.settings.get("preset_geometry", {}).get(kind)
         screen = QApplication.primaryScreen().availableGeometry()
+        if pg and len(pg) == 4:
+            rect = QRect(*[int(v) for v in pg])
+            if (rect.width() >= self.minimumWidth() and rect.height() >= self.minimumHeight()
+                    and screen.intersects(rect)):
+                self.setGeometry(rect)
+                return
+        self.resize(default_w, default_h)
+        if place == "bottom-right":
+            self.move(screen.right() - self.width() - MARGIN - 24,
+                      screen.bottom() - self.height() - MARGIN - 24)
+        elif place == "center":
+            self.move(max(screen.left() + 40, screen.center().x() - default_w // 2),
+                      max(screen.top() + 40, screen.center().y() - default_h // 2))
+
+    def apply_preset(self, kind):
+        """预设窗口尺寸：small=小窗 / strip=贴条（隐形）/ normal=恢复。
+
+        切换前把当前窗口几何存入当前模式的档案；每个模式各自记忆
+        用户手动调整过的大小与位置。
+        """
+        self._save_mode_geometry()
+        self._current_mode = kind
         if kind == "small":
             self._invisible = False
             self._reapply_window()
-            self.resize(360, 280)
+            self._restore_mode_geometry("small", 360, 280)
         elif kind == "strip":
             self._invisible = True
             self._reapply_window()
-            self.resize(520, 120)
-            self.move(screen.right() - self.width() - MARGIN - 24,
-                      screen.bottom() - self.height() - MARGIN - 24)
+            self._restore_mode_geometry("strip", 520, 120, place="bottom-right")
         else:  # normal
             self._invisible = False
             self._reapply_window()
-            self.resize(720, 920)
-            self.move(max(screen.left() + 40, screen.center().x() - 360),
-                      max(screen.top() + 40, screen.center().y() - 460))
+            self._restore_mode_geometry("normal", 720, 920, place="center")
         self.update_status()
 
     # ---------- 老板键 / 显示隐藏 ----------
@@ -258,6 +301,7 @@ class MainWindow(QMainWindow):
             self.activateWindow()
 
     def closeEvent(self, e):
+        self._save_mode_geometry()
         self.ctx.save_progress()
         self.ctx.save_window_state()
         self.reader.stop_auto()
@@ -363,28 +407,34 @@ class MainWindow(QMainWindow):
 
     # ---------- 自动隐藏（失焦 / 鼠标移出） ----------
     def _dialogs_open(self):
-        from PySide6.QtWidgets import QMenu, QMessageBox
+        """只要还有别的自家可见窗口（菜单/弹窗/提示框），就不自动隐藏。
+
+        菜单弹出同样伴随瞬时失焦，必须豁免，否则菜单根本点不到；
+        用户带着菜单切走时菜单会自动关闭，关闭引发的失焦会再次走延迟判断。
+        """
         for tl in QApplication.topLevelWidgets():
             if tl is self or not tl.isVisible():
                 continue
-            if isinstance(tl, (QMenu, QMessageBox)):
+            if tl.windowType() == Qt.ToolTip:
                 continue
-            if isinstance(tl, (TocDialog, BookmarksDialog, GotoDialog,
-                              SettingsDialog, BookshelfDialog)):
-                return True
+            return True
         return False
 
     def on_focus_changed(self, old, new):
-        if not self.ctx.settings.get("hide_on_blur") or not self.isVisible():
+        if not self.ctx.settings.get("hide_on_blur"):
             return
         if new is None:
-            self.boss_hide()
-            return
-        w = new.window()
-        if w is self or w is getattr(self, "_toc", None):
+            self._blur_timer.start()   # 延迟确认，避免误伤正在打开的弹窗
+        else:
+            self._blur_timer.stop()    # 焦点回到了应用内的某个窗口，取消隐藏
+
+    def _maybe_hide_on_blur(self):
+        if not self.ctx.settings.get("hide_on_blur") or not self.isVisible():
             return
         if self._dialogs_open():
             return
+        if QApplication.activeWindow() is not None:
+            return  # 焦点仍在自己应用的窗口里（设置/书架/目录等），不隐藏
         self.boss_hide()
 
     def _maybe_hide_on_leave(self):
@@ -398,16 +448,6 @@ class MainWindow(QMainWindow):
         elif e.type() == QEvent.Enter:
             self._leave_timer.stop()
         return super().event(e)
-
-    # ---------- 点击穿透悬浮窗 ----------
-    def toggle_click_through(self, on=None):
-        self._click_through = not self._click_through if on is None else bool(on)
-        self.setWindowFlag(Qt.WindowTransparentForInput, self._click_through)
-        self.show()
-        if self._click_through:
-            self.status.setText("点击穿透已开启：鼠标可点穿到下层应用，用托盘或老板键关闭")
-        else:
-            self.update_status()
 
     def show_settings(self):
         SettingsDialog(self.ctx, self).exec()
@@ -449,11 +489,6 @@ class MainWindow(QMainWindow):
         m.addAction("跳转到页…", self.show_goto)
         m.addAction("设置", self.show_settings)
         m.addSeparator()
-        act_pass = QAction("点击穿透悬浮窗", m, checkable=True)
-        act_pass.setChecked(self._click_through)
-        act_pass.toggled.connect(lambda on: self.toggle_click_through(on))
-        m.addAction(act_pass)
-        m.addSeparator()
         m.addAction("小窗模式（Ctrl+1）", lambda: self.apply_preset("small"))
         m.addAction("贴条模式（Ctrl+2）", lambda: self.apply_preset("strip"))
         m.addAction("恢复正常窗口（Ctrl+0）", lambda: self.apply_preset("normal"))
@@ -476,11 +511,6 @@ class MainWindow(QMainWindow):
         m.addAction("下一章", self.reader.next_chapter)
         m.addAction("自动滚动（Ctrl+T）", self.toggle_auto_scroll)
         m.addSeparator()
-        act_pass = QAction("点击穿透悬浮窗", m, checkable=True)
-        act_pass.setChecked(self._click_through)
-        act_pass.toggled.connect(lambda on: self.toggle_click_through(on))
-        m.addAction(act_pass)
-        m.addSeparator()
         m.addAction("小窗模式（Ctrl+1）", lambda: self.apply_preset("small"))
         m.addAction("贴条模式（Ctrl+2）", lambda: self.apply_preset("strip"))
         m.addAction("恢复正常窗口（Ctrl+0）", lambda: self.apply_preset("normal"))
@@ -493,22 +523,21 @@ class MainWindow(QMainWindow):
         m.addAction("退出", self.ctx.quit_app)
         m.exec(self.reader.mapToGlobal(pos))
 
-    # ---------- 无边框窗口：边缘缩放 ----------
+    # ---------- 无边框窗口：边缘缩放（应用级事件过滤，优先于子控件） ----------
     def _edge_at(self, pos):
         r = self.rect()
         flags = 0
-        if pos.x() <= HIT:
+        if pos.x() <= EDGE_BAND:
             flags |= EDGE_L
-        if pos.x() >= r.width() - HIT:
+        if pos.x() >= r.width() - EDGE_BAND:
             flags |= EDGE_R
-        if pos.y() <= HIT:
+        if pos.y() <= EDGE_BAND:
             flags |= EDGE_T
-        if pos.y() >= r.height() - HIT:
+        if pos.y() >= r.height() - EDGE_BAND:
             flags |= EDGE_B
         return flags
 
-    @staticmethod
-    def _cursor_for(flags):
+    def _cursor_for(self, flags):
         cursors = {
             EDGE_L: Qt.SizeHorCursor, EDGE_R: Qt.SizeHorCursor,
             EDGE_T: Qt.SizeVerCursor, EDGE_B: Qt.SizeVerCursor,
@@ -534,27 +563,32 @@ class MainWindow(QMainWindow):
             h = max(min_h, h + dy)
         return QRect(x, y, w, h)
 
-    def mousePressEvent(self, e):
-        if e.button() == Qt.LeftButton:
-            flags = self._edge_at(e.position().toPoint())
-            if flags:
-                self._resize = (flags, e.globalPosition().toPoint(), self.geometry())
-                e.accept()
-                return
-        super().mousePressEvent(e)
-
-    def mouseMoveEvent(self, e):
-        if self._resize is not None:
-            flags, g0, start = self._resize
-            self.setGeometry(self._resize_geometry(
-                flags, g0, e.globalPosition().toPoint(), start,
-                self.minimumWidth(), self.minimumHeight()))
-            e.accept()
-            return
-        cursor = self._cursor_for(self._edge_at(e.position().toPoint()))
-        self.setCursor(cursor if cursor is not None else Qt.ArrowCursor)
-        super().mouseMoveEvent(e)
-
-    def mouseReleaseEvent(self, e):
-        self._resize = None
-        super().mouseReleaseEvent(e)
+    def eventFilter(self, obj, e):
+        et = e.type()
+        if et in (QEvent.MouseButtonPress, QEvent.MouseMove, QEvent.MouseButtonRelease):
+            if (self.isVisible() and isinstance(obj, QWidget)
+                    and (obj is self or self.isAncestorOf(obj))):
+                gpos = e.globalPosition().toPoint()
+                local = self.mapFromGlobal(gpos)
+                flags = self._edge_at(local)
+                if et == QEvent.MouseButtonPress:
+                    if e.button() == Qt.LeftButton and flags and self._resize is None:
+                        self._resize = (flags, gpos, self.geometry())
+                        self.setCursor(self._cursor_for(flags) or Qt.ArrowCursor)
+                        self.grabMouse()  # 后续移动/释放都发给主窗口
+                        return True
+                elif et == QEvent.MouseMove:
+                    if self._resize is not None:
+                        flags, g0, start = self._resize
+                        self.setGeometry(self._resize_geometry(
+                            flags, g0, gpos, start,
+                            self.minimumWidth(), self.minimumHeight()))
+                        return True
+                    self.setCursor(self._cursor_for(flags) or Qt.ArrowCursor)
+                elif et == QEvent.MouseButtonRelease:
+                    if self._resize is not None:
+                        self._resize = None
+                        self.releaseMouse()
+                        self.unsetCursor()
+                        return True
+        return super().eventFilter(obj, e)
