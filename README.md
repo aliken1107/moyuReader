@@ -4,6 +4,12 @@
 
 需求来源见 [需求文档.md](需求文档.md)。当前为 MVP（需求 P0 范围）。
 
+## 下载安装
+
+- **安装版**：到 [Releases](https://github.com/aliken1107/moyuReader/releases/latest) 下载 `MoyuReader-Setup-*.exe`，双击安装（可选"仅为我安装"，无需管理员权限）
+- **绿色版**：同一页面下载 `MoyuReader.exe`，免安装双击即用（首次启动慢 1-2 秒属正常）
+- 系统要求：Windows 10 / 11 x64
+
 ## 截图
 
 | 主窗口（代码伪装皮肤） | 贴条模式 | 目录面板 |
