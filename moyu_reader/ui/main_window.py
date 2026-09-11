@@ -1,6 +1,6 @@
 """主窗口：无边框圆角 + 自定义标题栏 + 阅读区 + 状态栏 + 边缘缩放 + 隐形模式/老板键。"""
-from PySide6.QtCore import QRect, Qt, QTimer, QPoint
-from PySide6.QtGui import QColor, QKeySequence, QShortcut
+from PySide6.QtCore import QEvent, QRect, Qt, QTimer, QPoint
+from PySide6.QtGui import QAction, QColor, QKeySequence, QShortcut
 from PySide6.QtWidgets import (
     QApplication, QFileDialog, QFrame, QGraphicsDropShadowEffect, QHBoxLayout,
     QLabel, QMainWindow, QMenu, QMessageBox, QToolButton, QVBoxLayout, QWidget,
@@ -11,6 +11,8 @@ from ..icon import make_icon
 from ..parsers import parse_book
 from ..skins import get as get_skin
 from .bookshelf import BookshelfDialog
+from .bookmarks_dialog import BookmarksDialog
+from .goto_dialog import GotoDialog
 from .reader_view import ReaderView
 from .settings_dialog import SettingsDialog
 from .toc_dialog import TocDialog
@@ -87,6 +89,11 @@ class MainWindow(QMainWindow):
         self._invisible = False
         self._resize = None
         self._toc = None
+        self._click_through = False
+        self._leave_timer = QTimer(self)
+        self._leave_timer.setSingleShot(True)
+        self._leave_timer.setInterval(400)
+        self._leave_timer.timeout.connect(self._maybe_hide_on_leave)
         self.setWindowTitle(ctx.settings["window_title"])
         self.setWindowIcon(make_icon())  # 任务栏图标
         self.setMinimumSize(MIN_W, MIN_H)
@@ -316,6 +323,92 @@ class MainWindow(QMainWindow):
         self.update_status()
         self.ctx.save_progress()
 
+    def jump_page(self, page_idx):
+        self.reader.jump_to_page(page_idx)
+        self.update_status()
+        self.ctx.save_progress()
+
+    def jump_bookmark(self, mark):
+        chapters = self.reader.chapters
+        if not chapters:
+            return
+        self.reader.load_chapter(chapters, mark.get("chapter", 0), mark.get("offset", 0.0))
+        self.update_header()
+        self.update_status()
+        self.ctx.save_progress()
+
+    def show_goto(self):
+        if not self.reader.chapter_count:
+            self.status.setText("先打开一本书（Ctrl+O）")
+            return
+        GotoDialog(self).exec()
+
+    def add_bookmark(self):
+        book = self.ctx.book
+        if not book or not self.reader.chapter_count:
+            self.status.setText("先打开一本书（Ctrl+O）")
+            return
+        ch = self.reader.current_chapter()
+        label = f"{ch.title[:16]} · {int(self.reader.fraction() * 100)}%"
+        if storage.add_bookmark(book.path, self.reader.chapter_index, self.reader.fraction(), label):
+            self.status.setText(f"已添加书签：{label}")
+        else:
+            self.status.setText("添加书签失败（书不在书架？）")
+
+    def show_bookmarks(self):
+        if not self.reader.chapter_count:
+            self.status.setText("先打开一本书（Ctrl+O）")
+            return
+        BookmarksDialog(self).exec()
+
+    # ---------- 自动隐藏（失焦 / 鼠标移出） ----------
+    def _dialogs_open(self):
+        from PySide6.QtWidgets import QMenu, QMessageBox
+        for tl in QApplication.topLevelWidgets():
+            if tl is self or not tl.isVisible():
+                continue
+            if isinstance(tl, (QMenu, QMessageBox)):
+                continue
+            if isinstance(tl, (TocDialog, BookmarksDialog, GotoDialog,
+                              SettingsDialog, BookshelfDialog)):
+                return True
+        return False
+
+    def on_focus_changed(self, old, new):
+        if not self.ctx.settings.get("hide_on_blur") or not self.isVisible():
+            return
+        if new is None:
+            self.boss_hide()
+            return
+        w = new.window()
+        if w is self or w is getattr(self, "_toc", None):
+            return
+        if self._dialogs_open():
+            return
+        self.boss_hide()
+
+    def _maybe_hide_on_leave(self):
+        if (self.ctx.settings.get("hide_on_leave") and self.isVisible()
+                and not self._dialogs_open()):
+            self.boss_hide()
+
+    def event(self, e):
+        if e.type() == QEvent.Leave:
+            self._leave_timer.start()
+        elif e.type() == QEvent.Enter:
+            self._leave_timer.stop()
+        return super().event(e)
+
+    # ---------- 点击穿透悬浮窗 ----------
+    def toggle_click_through(self, on=None):
+        self._click_through = not self._click_through if on is None else bool(on)
+        self.setWindowFlag(Qt.WindowTransparentForInput, self._click_through)
+        self.show()
+        if self._click_through:
+            self.status.setText("点击穿透已开启：鼠标可点穿到下层应用，用托盘或老板键关闭")
+        else:
+            self.update_status()
+
     def show_settings(self):
         SettingsDialog(self.ctx, self).exec()
 
@@ -332,6 +425,9 @@ class MainWindow(QMainWindow):
             ("Ctrl+D", self.show_toc),
             ("Ctrl+,", self.show_settings),
             ("Ctrl+T", self.toggle_auto_scroll),
+            ("Ctrl+E", self.add_bookmark),
+            ("Ctrl+Shift+E", self.show_bookmarks),
+            ("Ctrl+G", self.show_goto),
             ("Ctrl+1", lambda: self.apply_preset("small")),
             ("Ctrl+2", lambda: self.apply_preset("strip")),
             ("Ctrl+0", lambda: self.apply_preset("normal")),
@@ -349,7 +445,14 @@ class MainWindow(QMainWindow):
         m.addAction("打开文件…", self.open_file_dialog)
         m.addAction("书架", self.show_bookshelf)
         m.addAction("目录", self.show_toc)
+        m.addAction("书签", self.show_bookmarks)
+        m.addAction("跳转到页…", self.show_goto)
         m.addAction("设置", self.show_settings)
+        m.addSeparator()
+        act_pass = QAction("点击穿透悬浮窗", m, checkable=True)
+        act_pass.setChecked(self._click_through)
+        act_pass.toggled.connect(lambda on: self.toggle_click_through(on))
+        m.addAction(act_pass)
         m.addSeparator()
         m.addAction("小窗模式（Ctrl+1）", lambda: self.apply_preset("small"))
         m.addAction("贴条模式（Ctrl+2）", lambda: self.apply_preset("strip"))
@@ -364,10 +467,19 @@ class MainWindow(QMainWindow):
 
     def _on_reader_menu(self, pos):
         m = QMenu(self)
+        m.addAction("添加书签（Ctrl+E）", self.add_bookmark)
+        m.addAction("书签列表（Ctrl+Shift+E）", self.show_bookmarks)
+        m.addAction("跳转到页（Ctrl+G）", self.show_goto)
+        m.addSeparator()
         m.addAction("目录（Ctrl+D）", self.show_toc)
         m.addAction("上一章", self.reader.prev_chapter)
         m.addAction("下一章", self.reader.next_chapter)
         m.addAction("自动滚动（Ctrl+T）", self.toggle_auto_scroll)
+        m.addSeparator()
+        act_pass = QAction("点击穿透悬浮窗", m, checkable=True)
+        act_pass.setChecked(self._click_through)
+        act_pass.toggled.connect(lambda on: self.toggle_click_through(on))
+        m.addAction(act_pass)
         m.addSeparator()
         m.addAction("小窗模式（Ctrl+1）", lambda: self.apply_preset("small"))
         m.addAction("贴条模式（Ctrl+2）", lambda: self.apply_preset("strip"))

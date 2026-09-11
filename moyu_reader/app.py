@@ -86,6 +86,7 @@ def run():
     win = MainWindow(ctx)
     ctx.win = win
     ctx.tray = Tray(ctx, win)
+    app.focusChanged.connect(win.on_focus_changed)  # 失焦自动隐藏
 
     # 恢复上次关闭时的窗口位置与大小（仍在屏幕内才恢复）
     geo = ctx.settings.get("geometry")

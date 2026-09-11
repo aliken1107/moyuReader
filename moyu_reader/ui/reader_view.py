@@ -108,12 +108,15 @@ class ReaderView(QTextEdit):
         return max(1, self.viewport().height())
 
     def total_pages(self):
-        doc_h = self.document().size().height()
-        return max(1, int(round(doc_h / self._vh())))
+        sb = self.verticalScrollBar()
+        if sb.maximum() <= 0:
+            return 1
+        return sb.maximum() // self._vh() + 1
 
     def page(self):
         sb = self.verticalScrollBar()
-        return min(sb.value() // self._vh(), self.total_pages() - 1)
+        total = self.total_pages()
+        return min(sb.value() // self._vh(), total - 1)
 
     def next_page(self):
         sb = self.verticalScrollBar()
@@ -138,6 +141,13 @@ class ReaderView(QTextEdit):
             self.load_chapter(self._chapters, self._chapter - 1, fraction=1.0)
             self.on_chapter_changed.emit()
             self.on_page_changed.emit()
+
+    def jump_to_page(self, page_idx):
+        """跳转到当前章的指定页（0 起）。"""
+        total = self.total_pages()
+        idx = max(0, min(int(page_idx), total - 1))
+        self.verticalScrollBar().setValue(idx * self._vh())
+        self.on_page_changed.emit()
 
     def next_chapter(self):
         if self._chapter < len(self._chapters) - 1:

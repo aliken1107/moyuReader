@@ -23,6 +23,10 @@ class Tray:
         self.menu.addAction("书架", self.win.show_bookshelf)
         self.menu.addAction("设置", self.win.show_settings)
         self.menu.addSeparator()
+        self.act_pass = QAction("点击穿透悬浮窗", self.menu, checkable=True)
+        self.act_pass.toggled.connect(lambda on: self.win.toggle_click_through(on))
+        self.menu.addAction(self.act_pass)
+        self.menu.addSeparator()
         self.recent_menu = self.menu.addMenu("最近阅读")
         self.menu.addSeparator()
         self.menu.addAction("退出", self.ctx.quit_app)
@@ -33,6 +37,10 @@ class Tray:
         self.icon.show()
 
     def _rebuild_recent(self):
+        # 同步穿透开关的勾选状态（屏蔽信号，避免打开菜单时误触发开关）
+        self.act_pass.blockSignals(True)
+        self.act_pass.setChecked(self.win._click_through)
+        self.act_pass.blockSignals(False)
         self.recent_menu.clear()
         for b in self.ctx.shelf[:5]:
             path = b.get("path", "")

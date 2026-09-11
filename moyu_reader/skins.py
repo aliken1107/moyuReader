@@ -41,6 +41,30 @@ SKINS = {
         "font_family": "Microsoft YaHei",
         "mono": False,
     },
+    "terminal": {
+        "name": "终端（黑底绿字）",
+        "bg": "#0c0c0c",
+        "fg": "#33ff66",
+        "selection": "#1f3d2a",
+        "font_family": "Consolas",
+        "mono": True,
+    },
+    "browser": {
+        "name": "浏览器网页",
+        "bg": "#ffffff",
+        "fg": "#1f2937",
+        "selection": "#cce0ff",
+        "font_family": "Microsoft YaHei",
+        "mono": False,
+    },
+    "wechat": {
+        "name": "微信灰底",
+        "bg": "#ededed",
+        "fg": "#191919",
+        "selection": "#c9e7c9",
+        "font_family": "Microsoft YaHei",
+        "mono": False,
+    },
 }
 
 

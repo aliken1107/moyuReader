@@ -43,6 +43,11 @@ class SettingsDialog(QDialog):
         self.chk_top = QCheckBox("窗口置顶")
         self.chk_top.setChecked(s["always_on_top"])
 
+        self.chk_blur = QCheckBox("失去焦点时自动隐藏")
+        self.chk_blur.setChecked(s["hide_on_blur"])
+        self.chk_leave = QCheckBox("鼠标移出窗口后自动隐藏（约 0.4 秒延迟）")
+        self.chk_leave.setChecked(s["hide_on_leave"])
+
         self.sld_opacity = QSlider(Qt.Orientation.Horizontal)
         self.sld_opacity.setRange(1, 100)
         self.sld_opacity.setValue(s["opacity"])
@@ -63,6 +68,8 @@ class SettingsDialog(QDialog):
         form.addRow("老板键", self.edt_boss)
         form.addRow("", hint_boss)
         form.addRow("置顶", self.chk_top)
+        form.addRow("失焦隐藏", self.chk_blur)
+        form.addRow("移出隐藏", self.chk_leave)
         form.addRow("窗口不透明度（实时生效）", self._opacity_row())
         form.addRow("自动滚动速度", self.cmb_speed)
         form.addRow("窗口/托盘名称", self.edt_title)
@@ -104,6 +111,8 @@ class SettingsDialog(QDialog):
             "line_height": self.spin_line.value(),
             "boss_key": self.edt_boss.text().strip(),
             "always_on_top": self.chk_top.isChecked(),
+            "hide_on_blur": self.chk_blur.isChecked(),
+            "hide_on_leave": self.chk_leave.isChecked(),
             "opacity": self.sld_opacity.value(),
             "auto_scroll_speed": self.cmb_speed.currentData(),
             "window_title": self.edt_title.text().strip() or "MoyuReader",
