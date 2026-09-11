@@ -6,7 +6,8 @@
 
 ## 下载安装
 
-- **安装版**：到 [Releases](https://github.com/aliken1107/moyuReader/releases/latest) 下载 `MoyuReader-Setup-*.exe`，双击安装（可选"仅为我安装"，无需管理员权限）
+- **码云（国内推荐）**：到 [发行版页面](https://gitee.com/aliken/moyu-reader/releases) 下载 `MoyuReader-Setup-*.exe`
+- **GitHub**：到 [Releases](https://github.com/aliken1107/moyuReader/releases/latest) 下载 `MoyuReader-Setup-*.exe`
 - **绿色版**：同一页面下载 `MoyuReader.exe`，免安装双击即用（首次启动慢 1-2 秒属正常）
 - 系统要求：Windows 10 / 11 x64
 
