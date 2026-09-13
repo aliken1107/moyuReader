@@ -2,10 +2,10 @@
 import sys
 
 from PySide6.QtCore import QRect
-from PySide6.QtWidgets import QApplication, QFileDialog
+from PySide6.QtWidgets import QApplication, QFileDialog, QMessageBox, QSystemTrayIcon
 
 from . import config, storage, theme
-from .hotkeys import GlobalHotkey
+from .hotkeys import GlobalHotkey, parse_hotkey
 from .icon import make_icon
 from .ui.main_window import MainWindow
 from .tray import Tray
@@ -25,6 +25,23 @@ class AppContext:
     @property
     def tray_enabled(self):
         return bool(self.tray and self.tray.enabled)
+
+    def notify_hotkey_failed(self):
+        """全局老板键注册失败时提示：状态栏 + 托盘气泡；无托盘则弹窗。"""
+        text = self.settings.get("boss_key", "")
+        if parse_hotkey(text) is None:
+            reason = "格式无效，请在设置中重新填写（示例：Ctrl+Shift+Z）"
+        else:
+            reason = "可能已被其他程序占用，或系统不支持全局热键"
+        message = f"老板键 {text or '（空）'} 注册失败：{reason}；应用内 Esc/F12 仍可隐藏。"
+        if self.win:
+            self.win.status.setText(message)
+        if self.tray_enabled:
+            self.tray.icon.showMessage(
+                "老板键注册失败", message, QSystemTrayIcon.Warning, 5000
+            )
+        else:
+            QMessageBox.warning(self.win, "老板键注册失败", message)
 
     def open_book(self, path, resume=False):
         self.win.open_book(path, resume)
@@ -57,7 +74,8 @@ class AppContext:
         self.win.reader.set_auto_speed(self.settings["auto_scroll_speed"])
         if self.hotkey:
             self.hotkey.unregister()
-            self.hotkey.register(self.settings["boss_key"])
+            if not self.hotkey.register(self.settings["boss_key"]):
+                self.notify_hotkey_failed()
 
     def save_window_state(self):
         """把当前窗口位置与大小写入设置。"""
@@ -99,8 +117,7 @@ def run():
     ctx.hotkey = GlobalHotkey(win.boss_hide)
     app.installNativeEventFilter(ctx.hotkey)
     if not ctx.hotkey.register(ctx.settings["boss_key"]):
-        # 热键被占用或格式无效：静默降级，应用内 Esc/F12 仍可隐藏
-        pass
+        ctx.notify_hotkey_failed()
 
     if ctx.shelf:
         win.open_book(ctx.shelf[0]["path"], resume=True)
